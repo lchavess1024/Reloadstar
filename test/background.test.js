@@ -26,12 +26,21 @@ async function setup(t) {
   const power = [];
   const badges = new Map();
   let nextAlarm;
+  let activeTabId = 1;
+  let menuTitle;
   const pages = new Map([[1, { url: 'https://example.com/', status: 'complete' }],
     [2, { url: 'https://example.org/', status: 'complete' }]]);
   const chrome = {
     storage: { local: storage(), session: storage() },
-    runtime: { id: 'test-extension', onInstalled: event(), onMessage: event() },
-    contextMenus: { onClicked: event() },
+    runtime: { id: 'test-extension', onInstalled: event(), onStartup: event(), onMessage: event() },
+    contextMenus: {
+      onClicked: event(),
+      update(id, { title }, done) {
+        assert.equal(id, 'toggle-refresh');
+        menuTitle = title;
+        done();
+      },
+    },
     action: { async setBadgeText({ tabId, text }) { badges.set(tabId, text); } },
     alarms: {
       onAlarm: event(),
@@ -41,7 +50,13 @@ async function setup(t) {
     },
     permissions: { async contains() { return true; }, onRemoved: event() },
     power: { requestKeepAwake(mode) { power.push(mode); }, releaseKeepAwake() { power.push('release'); } },
+    windows: { WINDOW_ID_NONE: -1, onFocusChanged: event() },
     tabs: {
+      onActivated: event(),
+      async query(options) {
+        assert.deepEqual(options, { active: true, lastFocusedWindow: true });
+        return [{ id: activeTabId }];
+      },
       onRemoved: event(), onReplaced: event(), onUpdated: event(),
       async get(tabId) {
         if (!pages.has(tabId)) throw new Error('Tab was closed');
@@ -63,18 +78,32 @@ async function setup(t) {
     chrome.alarms.onAlarm.fire(alarm);
     await request('state');
   }
-  return { request, fireAlarm, chrome, refreshed, power, badges, pages, nextAlarm: () => nextAlarm };
+  function activate(tabId, windowChanged = false) {
+    activeTabId = tabId;
+    if (windowChanged) chrome.windows.onFocusChanged.fire(2);
+    else chrome.tabs.onActivated.fire({ tabId, windowId: 1 });
+  }
+  return { request, fireAlarm, chrome, refreshed, power, badges, pages, activate,
+    menuTitle: () => menuTitle, nextAlarm: () => nextAlarm };
 }
 
-test('page menu starts at 30 seconds and stops the selected tab', async t => {
+test('page menu shows Start or Stop for the active tab and defaults to 30 seconds', async t => {
   const app = await setup(t);
   assert.equal((await app.request('state')).settings.interval, 30);
+  assert.equal(app.menuTitle(), 'Reloadstar · Start auto-refresh');
   const menu = { menuItemId: 'toggle-refresh' };
   app.chrome.contextMenus.onClicked.fire(menu, { id: 1 });
   assert.equal((await app.request('state')).session.interval, 30);
   assert.equal((await app.request('state', 2)).session, null);
   assert.equal(app.nextAlarm().scheduledTime, 31_000);
   assert.equal(app.badges.get(1), 'ON');
+  assert.equal(app.menuTitle(), 'Reloadstar · Stop auto-refresh');
+  app.activate(2);
+  await app.request('state', 2);
+  assert.equal(app.menuTitle(), 'Reloadstar · Start auto-refresh');
+  app.activate(1, true);
+  await app.request('state');
+  assert.equal(app.menuTitle(), 'Reloadstar · Stop auto-refresh');
   t.mock.timers.tick(30_000);
   await app.fireAlarm();
   assert.deepEqual(app.refreshed, [1]);
@@ -82,6 +111,7 @@ test('page menu starts at 30 seconds and stops the selected tab', async t => {
   assert.equal((await app.request('state')).session, null);
   assert.equal(app.nextAlarm(), undefined);
   assert.equal(app.badges.get(1), '');
+  assert.equal(app.menuTitle(), 'Reloadstar · Start auto-refresh');
 });
 
 test('sub-30-second timer runs with a 30-second fallback and skips tabs that are loading', async t => {
