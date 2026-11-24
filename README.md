@@ -2,7 +2,7 @@
 
 Reloadstar is a small Chrome extension that refreshes the webpages you choose. It shares Clipstar's navy, cyan, and gold-star design.
 
-Right-click a webpage and choose **Reloadstar · Start auto-refresh**. While the current tab is refreshing, the menu reads **Reloadstar · Stop auto-refresh**. In the toolbar popup you can see the current tab's status, start or stop it, and set an interval between 1 and 86,400 seconds. The default is 30 seconds. Chrome may delay intervals, especially below 30 seconds. A tab that's still loading skips that refresh so slow pages have time to finish.
+Right-click a webpage and choose **Start** next to the Reloadstar icon. While the current tab is refreshing, the menu reads **Stop**. In the toolbar popup you can see the current tab's status, start or stop it, and set an interval between 1 and 86,400 seconds. The default is 30 seconds. Chrome may delay intervals, especially below 30 seconds. A tab that's still loading skips that refresh so slow pages have time to finish.
 
 In Settings, **Keep awake while refreshing** requests that Chrome prevent idle sleep while at least one session is active. System lock and login policies continue to apply.
 

@@ -1,8 +1,8 @@
 import { defaults, powerPermission, validateInterval } from './preferences.js';
 
 const menu = 'toggle-refresh';
-const startMenuTitle = 'Reloadstar · Start auto-refresh';
-const stopMenuTitle = 'Reloadstar · Stop auto-refresh';
+const startMenuTitle = 'Start';
+const stopMenuTitle = 'Stop';
 const alarm = 'next-refresh';
 const minimumAlarmMs = 30_000;
 const website = /^https?:\/\//i;

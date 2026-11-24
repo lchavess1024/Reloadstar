@@ -90,20 +90,20 @@ async function setup(t) {
 test('page menu shows Start or Stop for the active tab and defaults to 30 seconds', async t => {
   const app = await setup(t);
   assert.equal((await app.request('state')).settings.interval, 30);
-  assert.equal(app.menuTitle(), 'Reloadstar · Start auto-refresh');
+  assert.equal(app.menuTitle(), 'Start');
   const menu = { menuItemId: 'toggle-refresh' };
   app.chrome.contextMenus.onClicked.fire(menu, { id: 1 });
   assert.equal((await app.request('state')).session.interval, 30);
   assert.equal((await app.request('state', 2)).session, null);
   assert.equal(app.nextAlarm().scheduledTime, 31_000);
   assert.equal(app.badges.get(1), 'ON');
-  assert.equal(app.menuTitle(), 'Reloadstar · Stop auto-refresh');
+  assert.equal(app.menuTitle(), 'Stop');
   app.activate(2);
   await app.request('state', 2);
-  assert.equal(app.menuTitle(), 'Reloadstar · Start auto-refresh');
+  assert.equal(app.menuTitle(), 'Start');
   app.activate(1, true);
   await app.request('state');
-  assert.equal(app.menuTitle(), 'Reloadstar · Stop auto-refresh');
+  assert.equal(app.menuTitle(), 'Stop');
   t.mock.timers.tick(30_000);
   await app.fireAlarm();
   assert.deepEqual(app.refreshed, [1]);
@@ -111,7 +111,7 @@ test('page menu shows Start or Stop for the active tab and defaults to 30 second
   assert.equal((await app.request('state')).session, null);
   assert.equal(app.nextAlarm(), undefined);
   assert.equal(app.badges.get(1), '');
-  assert.equal(app.menuTitle(), 'Reloadstar · Start auto-refresh');
+  assert.equal(app.menuTitle(), 'Start');
 });
 
 test('sub-30-second timer runs with a 30-second fallback and skips tabs that are loading', async t => {
