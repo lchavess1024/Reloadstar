@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reloadstar</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="" width="44" height="44">
+    <h1>Reloadstar</h1>
+    <button id="open-settings" class="icon-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
+  </header>
+  <main>
+    <section class="card" aria-label="Auto-refresh">
+      <p id="status" class="status" role="status"><span class="dot"></span><span id="status-text">Checking this tab…</span></p>
+      <form id="refresh-form">
+        <label for="interval">Refresh every</label>
+        <div class="field">
+          <input id="interval" type="number" min="1" max="86400" step="1" value="30" required disabled>
+          <span>seconds</span>
+        </div>
+        <p class="hint" id="timer-note" hidden>Chrome may delay intervals under 30 seconds.</p>
+        <button class="primary" id="start" type="submit" disabled>Start auto-refresh</button>
+        <button class="primary" id="stop" type="button" hidden>Stop auto-refresh</button>
+        <button class="secondary" id="save" type="button" hidden>Save interval</button>
+      </form>
+      <p class="error" id="refresh-error" role="alert" hidden></p>
+    </section>
+    <p class="shortcut">You can also start or stop from the page’s right-click menu.</p>
+  </main>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="dialog-heading">
+      <h2 id="settings-title">Settings</h2>
+      <form method="dialog"><button type="submit" class="icon-button" aria-label="Close settings">×</button></form>
+    </div>
+    <section class="card" aria-label="Power">
+      <label class="check"><input id="keep-awake" type="checkbox" disabled><span>Keep awake while refreshing</span></label>
+      <p class="hint">Requests that Chrome prevent idle sleep. Your screen can still turn off or lock.</p>
+      <p class="error" id="wake-error" role="alert" hidden></p>
+    </section>
+    <section class="card" aria-labelledby="privacy-title">
+      <h3 id="privacy-title">Have a privacy concern?</h3>
+      <p>Settings stay on this device. Reloadstar has no account, analytics, or telemetry.</p>
+      <div class="links">
+        <a href="https://github.com/lchavess1024/Reloadstar" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+        <a href="https://github.com/lchavess1024/Reloadstar/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy policy</a>
+        <a href="https://github.com/lchavess1024/Reloadstar/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+      </div>
+      <a class="profile" href="https://github.com/lchavess1024" target="_blank" rel="noopener noreferrer">@lchavess1024</a>
+    </section>
+  </dialog>
+</body>
+</html>
