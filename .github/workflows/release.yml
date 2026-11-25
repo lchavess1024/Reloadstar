@@ -58,13 +58,17 @@ jobs:
         run: |
           cd dist
           sha256sum --strict --check "$ARCHIVE.sha256"
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null); then
             gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$ARCHIVE" --pattern "$ARCHIVE.sha256" --dir existing
             cmp "$ARCHIVE" "existing/$ARCHIVE"
             cmp "$ARCHIVE.sha256" "existing/$ARCHIVE.sha256"
+            if [[ "$draft" == true ]]; then
+              gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+            fi
           else
             gh release create "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
           fi
+          test "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false
 
   chrome-web-store:
     needs: [package, github-release]
