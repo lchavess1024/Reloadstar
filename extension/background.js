@@ -1,8 +1,8 @@
 import { defaults, powerPermission, validateInterval } from './preferences.js';
 
 const menu = 'toggle-refresh';
-const startMenuTitle = 'Start';
-const stopMenuTitle = 'Stop';
+const startMenuTitle = 'Reloadstar · Start';
+const stopMenuTitle = 'Reloadstar · Stop';
 const alarm = 'next-refresh';
 const minimumAlarmMs = 30_000;
 const website = /^https?:\/\//i;
@@ -231,9 +231,15 @@ chrome.windows.onFocusChanged.addListener(windowId => {
 chrome.tabs.onRemoved.addListener(tabId => run(() => stop(tabId)));
 chrome.tabs.onReplaced.addListener((_, tabId) => run(() => stop(tabId)));
 chrome.tabs.onUpdated.addListener((tabId, change) => {
-  if (change.status !== 'complete') return;
+  if (change.status !== 'loading' && change.status !== 'complete') return;
   run(async () => {
-    if (sessions[tabId] && !canRefresh(await getTab(tabId))) await stop(tabId);
+    if (!sessions[tabId]) return;
+    if (change.status === 'complete' && !canRefresh(await getTab(tabId))) {
+      await stop(tabId);
+      return;
+    }
+    // Chrome clears tab-specific toolbar state when a navigation commits.
+    await updateBadge(tabId);
   });
 });
 
