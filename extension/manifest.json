@@ -1,17 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Reloadstar",
-  "description": "Auto-refresh a tab on your schedule, with an optional idle-sleep blocker.",
-  "version": "1.0.3",
+  "description": "Auto-refresh a tab on your schedule.",
+  "version": "1.0.4",
   "minimum_chrome_version": "120",
   "permissions": [
     "activeTab",
     "alarms",
     "contextMenus",
     "storage"
-  ],
-  "optional_permissions": [
-    "power"
   ],
   "background": {
     "service_worker": "background.js",

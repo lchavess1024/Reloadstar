@@ -1,6 +1,5 @@
-export const defaults = Object.freeze({ interval: 30, keepAwake: false });
+export const defaults = Object.freeze({ interval: 30 });
 export const maxInterval = 86_400;
-export const powerPermission = { permissions: ['power'] };
 
 export function validateInterval(value) {
   if (!Number.isInteger(value) || value < 1 || value > maxInterval) {

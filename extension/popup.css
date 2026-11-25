@@ -18,7 +18,7 @@ body {
   padding: 16px;
   background: radial-gradient(ellipse at top left, #153649, transparent 66%), linear-gradient(#081320, #0c1727);
 }
-body:has(dialog[open]) { min-height: 446px; }
+body:has(dialog[open]) { min-height: 356px; }
 
 h1, h2, h3, p { margin: 0; }
 h1 { font-size: 24px; letter-spacing: -.6px; line-height: 1.15; }
@@ -96,9 +96,6 @@ input[type="number"] {
 }
 #settings::backdrop { background: #050d18b8; }
 .dialog-heading { justify-content: space-between; margin-bottom: 11px; }
-#settings .card + .card { margin-top: 10px; }
-.check { display: flex; gap: 8px; align-items: start; }
-.check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 2px 0 0; flex: none; }
 .privacy-card { border-color: #78c9f05c; background: #38bdf810; }
 .privacy-card p { margin-top: 7px; color: var(--muted); font-size: 13px; }
 .privacy-card p a { color: var(--accent); font-weight: 650; text-underline-offset: 2px; }

@@ -9,42 +9,68 @@ permissions:
 
 jobs:
   package:
-    if: github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    outputs:
+      filename: ${{ steps.version.outputs.filename }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Verify release tag
+        id: version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$GITHUB_REF_NAME" = "v$version"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          echo "filename=reloadstar-$version.zip" >> "$GITHUB_OUTPUT"
+      - run: npm run verify
+      - run: npm run package
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        id: upload
+        with:
+          name: reloadstar-release-${{ github.run_attempt }}
+          path: |
+            dist/${{ steps.version.outputs.filename }}
+            dist/${{ steps.version.outputs.filename }}.sha256
+          if-no-files-found: error
+
+  github-release:
+    needs: package
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-      - name: Verify release tag
-        run: |
-          version=$(node -p "require('./package.json').version")
-          test "$GITHUB_REF_NAME" = "v$version"
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - run: npm run verify
-      - run: npm run package
-      - uses: actions/upload-artifact@v6
-        with:
-          name: reloadstar-release
-          path: dist/*
-          if-no-files-found: error
-      - name: Attach package to GitHub release
+          artifact-ids: ${{ needs.package.outputs.artifact-id }}
+          path: dist
+      - name: Publish verified package to GitHub
         env:
           GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ needs.package.outputs.filename }}
         run: |
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+          cd dist
+          sha256sum --strict --check "$ARCHIVE.sha256"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$ARCHIVE" --pattern "$ARCHIVE.sha256" --dir existing
+            cmp "$ARCHIVE" "existing/$ARCHIVE"
+            cmp "$ARCHIVE.sha256" "existing/$ARCHIVE.sha256"
+          else
+            gh release create "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
           fi
 
   chrome-web-store:
-    needs: package
+    needs: [package, github-release]
     if: >-
-      always() && github.repository == 'lchavess1024/Reloadstar' &&
-      ((github.ref_type == 'tag' && needs.package.result == 'success' && vars.CWS_PUBLISH_ENABLED == 'true') ||
+      !cancelled() && github.repository == 'lchavess1024/Reloadstar' &&
+      ((github.event_name == 'push' && github.ref_type == 'tag' && needs.github-release.result == 'success' && vars.CWS_PUBLISH_ENABLED == 'true') ||
        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -55,8 +81,10 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
       - name: Check Store configuration
@@ -70,19 +98,20 @@ jobs:
             echo '::error::Set the four Chrome Web Store variables described in docs/RELEASE.md.'
             exit 1
           fi
-      - uses: actions/download-artifact@v7
-        if: github.ref_type == 'tag'
-        with:
-          name: reloadstar-release
-          path: dist
+      - name: Download published GitHub assets
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ needs.package.outputs.filename }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$ARCHIVE" --pattern "$ARCHIVE.sha256" --dir dist
       - name: Get a short-lived Google access token
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ vars.CWS_WIF_PROVIDER }}
           service_account: ${{ vars.CWS_SERVICE_ACCOUNT }}
           token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          access_token_scopes: ${{ github.event_name == 'workflow_dispatch' && 'https://www.googleapis.com/auth/chromewebstore.readonly' || 'https://www.googleapis.com/auth/chromewebstore' }}
           create_credentials_file: false
           export_environment_variables: false
       - name: Check access or submit release
@@ -94,6 +123,5 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]; then
             npm run release -- --check-auth
           else
-            (cd dist && sha256sum --check *.sha256)
-            npm run release
+            npm run release -- --submit
           fi

@@ -1,10 +1,10 @@
 {
   "name": "reloadstar",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "node --check extension/background.js && node --check extension/popup.js && node --test",
+    "verify": "node --check extension/background.js && node --check extension/popup.js && node --check scripts/package.mjs && node --check scripts/publish-store.mjs && node --test",
     "package": "node scripts/package.mjs",
     "release": "node scripts/publish-store.mjs"
   },

@@ -1,4 +1,4 @@
-import { maxInterval, powerPermission } from './preferences.js';
+import { maxInterval } from './preferences.js';
 
 const byId = id => document.getElementById(id);
 const form = byId('refresh-form');
@@ -6,10 +6,8 @@ const interval = byId('interval');
 const start = byId('start');
 const stop = byId('stop');
 const save = byId('save');
-const wake = byId('keep-awake');
 const dialog = byId('settings');
 const refreshError = byId('refresh-error');
-const wakeError = byId('wake-error');
 let tabId;
 let current;
 let busy = false;
@@ -39,8 +37,6 @@ function render() {
   start.disabled = busy || !eligible;
   stop.hidden = !session;
   stop.disabled = busy;
-  wake.disabled = false;
-  wake.checked = settings.keepAwake;
   byId('status').classList.toggle('is-running', Boolean(session));
   byId('status-text').textContent = session ? 'Auto-refresh is on for this tab' :
     eligible ? 'Auto-refresh is off for this tab' : 'Open a webpage to use auto-refresh';
@@ -71,24 +67,6 @@ form.addEventListener('submit', event => {
 stop.addEventListener('click', () => changeRefresh('stop'));
 save.addEventListener('click', () => changeRefresh('interval'));
 byId('open-settings').addEventListener('click', () => dialog.showModal());
-
-wake.addEventListener('change', async () => {
-  const enabled = wake.checked;
-  wake.disabled = true;
-  showError(wakeError);
-  try {
-    if (enabled && !await chrome.permissions.request(powerPermission)) {
-      throw new Error('Chrome permission is needed to keep the device awake.');
-    }
-    const result = await send('wake', { enabled });
-    current.settings = result.settings;
-  } catch (error) {
-    showError(wakeError, error.message);
-  } finally {
-    wake.checked = current.settings.keepAwake;
-    wake.disabled = false;
-  }
-});
 
 try {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

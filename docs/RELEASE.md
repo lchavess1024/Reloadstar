@@ -1,6 +1,6 @@
 # Releasing Reloadstar
 
-Ordinary pushes to main run CI. When the manifest and package versions match, push a version tag such as **v1.0.1** from main. The Release workflow verifies the tag, runs tests, and attaches a ZIP and SHA-256 checksum to the GitHub release. When Store publishing is enabled, it also uploads the ZIP and submits it to the existing Reloadstar listing. Google reviews submissions and distributes approved updates through Chrome.
+Ordinary pushes to main run CI. When the manifest and package versions match, push a version tag such as **v1.0.1** from main. The Release workflow verifies the tag, runs tests, and attaches a ZIP and SHA-256 checksum to the GitHub release. A separate publish job verifies the checksum and checks that any existing release contains the same files. When Store publishing is enabled, it also uploads the ZIP and submits it to the existing Reloadstar listing. Google reviews submissions and distributes approved updates through Chrome.
 
 ## First Chrome Web Store release
 
@@ -22,4 +22,4 @@ Set these variables in **GitHub → Settings → Secrets and variables → Actio
 | CWS_SERVICE_ACCOUNT | Approved service account email |
 | CWS_PUBLISH_ENABLED | true after authentication has been verified |
 
-Dispatch **Release** manually on main to verify authorization before setting CWS_PUBLISH_ENABLED. That run reads the specified Store listing status. A later version tag on main that passes CI submits the update. See the [Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api/) and [Google GitHub Actions authentication](https://github.com/google-github-actions/auth).
+Dispatch **Release** manually on main to verify authorization before setting CWS_PUBLISH_ENABLED. That run reads the production Reloadstar listing with a read-only token. A later version tag on main submits the exact ZIP from its GitHub release when Store publishing is enabled. If federation is unavailable, download the GitHub release ZIP and checksum, verify the checksum, and upload that ZIP from the dashboard. Coordinate dashboard uploads with the workflow, since Chrome Web Store does not expose an individual identifier for an asynchronous upload. See the [Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api/) and [Google GitHub Actions authentication](https://github.com/google-github-actions/auth).

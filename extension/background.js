@@ -1,4 +1,4 @@
-import { defaults, powerPermission, validateInterval } from './preferences.js';
+import { defaults, validateInterval } from './preferences.js';
 
 const menu = 'toggle-refresh';
 const startMenuTitle = 'Reloadstar · Start';
@@ -9,7 +9,6 @@ const website = /^https?:\/\//i;
 let settings;
 let sessions;
 let timer;
-let keepAwake;
 let shownMenuTitle;
 let work = Promise.resolve();
 
@@ -31,11 +30,18 @@ function canRefresh(tab) {
   return website.test(tab?.url ?? '');
 }
 
+async function siteFingerprint(tab) {
+  if (!canRefresh(tab)) return null;
+  const origin = new TextEncoder().encode(new URL(tab.url).origin);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', origin));
+  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 async function updateBadge(tabId) {
   try {
     await chrome.action.setBadgeText({ tabId, text: sessions[tabId] ? 'ON' : '' });
   } catch (error) {
-    if (await getTab(tabId)) throw error;
+    if (await getTab(tabId)) console.warn('Reloadstar could not update its toolbar badge:', error.message);
   }
 }
 
@@ -50,26 +56,18 @@ function runMenuAction(action) {
 }
 
 async function syncMenuTitle() {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  const title = sessions[tab?.id] ? stopMenuTitle : startMenuTitle;
-  if (title === shownMenuTitle) return;
-
   try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const title = sessions[tab?.id] ? stopMenuTitle : startMenuTitle;
+    if (title === shownMenuTitle) return;
     await runMenuAction(done => chrome.contextMenus.update(menu, { title }, done));
     shownMenuTitle = title;
   } catch (error) {
     // The install event creates the menu if this worker starts before the first install.
-    if (!error.message.startsWith('Cannot find menu item with id')) throw error;
+    if (!error.message.startsWith('Cannot find menu item with id')) {
+      console.warn('Reloadstar could not update its page menu:', error.message);
+    }
   }
-}
-
-async function updatePower() {
-  const requested = Object.keys(sessions).length > 0 && settings.keepAwake;
-  const permitted = requested && await chrome.permissions.contains(powerPermission);
-  if (permitted === keepAwake) return;
-  if (permitted) chrome.power.requestKeepAwake('system');
-  else chrome.power?.releaseKeepAwake();
-  keepAwake = permitted;
 }
 
 async function schedule() {
@@ -97,14 +95,13 @@ async function schedule() {
 
 async function saveSessions() {
   await chrome.storage.session.set({ sessions });
-  await updatePower();
   await schedule();
 }
 
 async function start(tabId, interval) {
-  const tab = await getTab(tabId);
-  if (!canRefresh(tab)) throw new Error('Open a webpage to start auto-refresh.');
-  sessions[tabId] = { interval, dueAt: Date.now() + interval * 1000 };
+  const site = await siteFingerprint(await getTab(tabId));
+  if (!site) throw new Error('Open a webpage to start auto-refresh.');
+  sessions[tabId] = { interval, dueAt: Date.now() + interval * 1000, site };
   await saveSessions();
   await updateBadge(tabId);
   await syncMenuTitle();
@@ -121,19 +118,19 @@ async function stop(tabId) {
 async function refreshDueTabs() {
   const now = Date.now();
   const due = Object.entries(sessions).filter(([, session]) => session.dueAt <= now);
-  let removedSession = false;
+  const removedTabs = [];
   await Promise.all(due.map(async ([id, session]) => {
     const tabId = Number(id);
     const tab = await getTab(tabId);
-    if (!canRefresh(tab)) {
+    const site = await siteFingerprint(tab);
+    if (!site || site !== session.site) {
       delete sessions[id];
-      removedSession = true;
-      await updateBadge(tabId);
+      removedTabs.push(tabId);
       return;
     }
 
     session.dueAt = now + session.interval * 1000;
-    if (tab.status === 'loading') return;
+    if (tab.status === 'loading' || tab.pendingUrl) return;
     try {
       await chrome.tabs.reload(tabId);
     } catch (error) {
@@ -142,7 +139,10 @@ async function refreshDueTabs() {
   }));
   if (due.length) await saveSessions();
   else await schedule();
-  if (removedSession) await syncMenuTitle();
+  if (removedTabs.length) {
+    await Promise.all(removedTabs.map(updateBadge));
+    await syncMenuTitle();
+  }
 }
 
 async function saveSettings(updates) {
@@ -169,17 +169,16 @@ async function handleRequest(request) {
       break;
     case 'interval': {
       const interval = validateInterval(request.interval);
-      if (sessions[tabId]) await start(tabId, interval);
-      await saveSettings({ interval });
-      break;
-    }
-    case 'wake': {
-      const enabled = request.enabled === true;
-      if (enabled && !await chrome.permissions.contains(powerPermission)) {
-        throw new Error('Chrome permission is needed to keep the device awake.');
+      if (sessions[tabId]) {
+        const site = await siteFingerprint(await getTab(tabId));
+        if (!site || site !== sessions[tabId].site) await stop(tabId);
+        else {
+          sessions[tabId].interval = interval;
+          sessions[tabId].dueAt = Date.now() + interval * 1000;
+          await saveSessions();
+        }
       }
-      await saveSettings({ keepAwake: enabled });
-      await updatePower();
+      await saveSettings({ interval });
       break;
     }
     case 'state':
@@ -191,6 +190,7 @@ async function handleRequest(request) {
 }
 
 chrome.runtime.onInstalled.addListener(() => run(async () => {
+  await chrome.storage.local.remove('keepAwake');
   await runMenuAction(done => chrome.contextMenus.removeAll(done));
   await runMenuAction(done => chrome.contextMenus.create({
     id: menu,
@@ -210,7 +210,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, respond) => {
-  if (sender.id !== chrome.runtime.id || !Number.isInteger(request?.tabId)) return;
+  if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('popup.html') ||
+      !Number.isInteger(request?.tabId) || request.tabId < 0) return;
   enqueue(() => handleRequest(request)).then(
     result => respond(result),
     error => respond({ error: error.message }),
@@ -233,21 +234,16 @@ chrome.tabs.onReplaced.addListener((_, tabId) => run(() => stop(tabId)));
 chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.status !== 'loading' && change.status !== 'complete') return;
   run(async () => {
-    if (!sessions[tabId]) return;
-    if (change.status === 'complete' && !canRefresh(await getTab(tabId))) {
+    const session = sessions[tabId];
+    if (!session) return;
+    const site = await siteFingerprint(await getTab(tabId));
+    if (!site && change.status === 'loading') return;
+    if (!site || site !== session.site) {
       await stop(tabId);
       return;
     }
     // Chrome clears tab-specific toolbar state when a navigation commits.
     await updateBadge(tabId);
-  });
-});
-
-chrome.permissions.onRemoved.addListener(event => {
-  if (!event.permissions?.includes('power')) return;
-  run(async () => {
-    await saveSettings({ keepAwake: false });
-    await updatePower();
   });
 });
 
@@ -259,7 +255,6 @@ run(async () => {
   ]);
   settings = storedSettings;
   sessions = storedSession.sessions ?? {};
-  await updatePower();
   await refreshDueTabs();
   await syncMenuTitle();
 });
